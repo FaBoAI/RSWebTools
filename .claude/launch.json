@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "robstride-web",
+      "runtimeExecutable": "./.venv/bin/python",
+      "runtimeArgs": ["-m", "uvicorn", "backend.server:app", "--host", "127.0.0.1", "--port", "8765"],
+      "port": 8765
+    }
+  ]
+}
