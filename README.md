@@ -1,15 +1,42 @@
-# RobStride QDD コンフィギュレータ
+# RobStride QDD コンフィギュレータ (RSWebTools)
 
 RobStride 純正 **USB-CAN アダプタ** 経由で RobStride QDD アクチュエータ (RS00〜RS06) を
-ブラウザから設定・動作確認するためのローカル Web アプリケーションです。
+ブラウザから設定・動作確認するツールです。
 
-- **バックエンド**: Python (FastAPI + pyserial) — シリアルフレームの組立/解析、応答待ち、テレメトリ配信
-- **フロントエンド**: 素の HTML/CSS/JS (ビルド不要) — 日本語 UI
-- **プロトコル**: 公式ユーザーマニュアル記載の RobStride 私有プロトコル (CAN 2.0B 拡張フレーム) に準拠
+## 2 つの版
+
+| | Web 版 | ローカル版 |
+|---|---|---|
+| 使い方 | <https://rs.fabo.io> を開くだけ | `./run.sh` で起動 |
+| インストール | 不要 | Python 3.10+ |
+| 対応ブラウザ | Chrome / Edge (Web Serial API) | 任意 |
+| 用途 | 通常の設定作業 | CLI・自動化・実機なしの検証 |
+
+**プロトコル定義は共通です。** 機種プロファイルとパラメータ表は
+`backend/models.py` / `backend/params.py` を唯一の情報源とし、Web 版が使う
+`webserial/tables.js` はそこから生成しています (CI で同期を検証)。
+
+```bash
+python tools/gen_js_tables.py    # backend の定義から webserial/tables.js を再生成
+```
+
+## 実装の根拠
+
+プロトコルは各機種の公式ユーザーマニュアルから起こしました。マニュアル記載の実フレーム
+
+```
+41 54 90 07 e8 0c 08 05 70 00 00 01 00 00 00 0d 0a
+```
+
+をバイト単位で再現する回帰テストを Python 版・Web 版の両方に置いています。
+機種ごとに異なる P/V/T/KP/KD のスケーリングレンジも、各マニュアルの
+`#define P_MIN` … から採録しています。詳細は [docs/protocol.md](docs/protocol.md)。
+
+実機 (RS00 / RS06) で全機能の動作を確認済みです。
 
 ---
 
-## 起動
+## ローカル版の起動
 
 ```bash
 ./run.sh
@@ -199,14 +226,30 @@ CH340 のドライバが必要です。ポート一覧で `(CH340)` と表示さ
 ```
 backend/
   protocol.py   フレームの組立/解析、拡張 ID、スケーリング、フィードバック復号
-  models.py     機種別プロファイル (P/V/T/KP/KD レンジ)
-  params.py     パラメータ表と値のコーデック
+  models.py     機種別プロファイル (P/V/T/KP/KD レンジ)  ← 唯一の情報源
+  params.py     パラメータ表と値のコーデック            ← 唯一の情報源
   transport.py  シリアル送受信、受信スレッド、応答待ち
   motor.py      モータ操作の高水準 API
   server.py     FastAPI (REST + WebSocket)
-web/            UI (index.html / app.js / style.css)
-tests/          プロトコル層とフレーム組立の検証 (44 件)
-docs/           プロトコル要約
+web/            ローカル版 UI (ビルド不要)
+webserial/      Web 版 (静的・rs.fabo.io へデプロイ)
+  protocol.js   protocol.py の移植
+  robstride.js  Web Serial トランスポート + クライアント
+  tables.js     backend から生成 (直接編集しないこと)
+tools/          診断ツール・仮想モータ・テーブル生成
+docs/           プロトコル要約とアダプタ切り分け手順
+tests/          Python テスト
 ```
 
-プロトコルの詳細は [docs/protocol.md](docs/protocol.md) を参照してください。
+## テスト
+
+```bash
+./.venv/bin/python -m pytest tests -q   # Python 50 件
+node --test webserial/*.test.js         # JavaScript 21 件
+```
+
+両者はマニュアル記載の同じ実フレームを基準にしており、片方だけ壊れれば CI で検出できます。
+
+## ライセンス
+
+MIT License — [LICENSE](LICENSE) を参照してください。

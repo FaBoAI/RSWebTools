@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python:
+    name: Python テスト
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - run: python -m pytest tests -q
+
+  javascript:
+    name: JavaScript テスト
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test webserial/*.test.js
+
+  tables-in-sync:
+    name: 生成テーブルの同期確認
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      # webserial/tables.js は backend の定義から生成される。
+      # 手で編集されたり再生成し忘れたりすると Python 版と Web Serial 版で
+      # レンジが食い違い、角度・速度・トルクの換算がずれるため CI で止める。
+      - run: python tools/gen_js_tables.py
+      - name: 差分がないこと
+        run: git diff --exit-code webserial/tables.js

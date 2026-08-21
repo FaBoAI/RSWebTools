@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RobStride QDD コンフィギュレータ</title>
+<meta name="description" content="RobStride 純正 USB-CAN アダプタ経由で RobStride QDD アクチュエータ (RS00〜RS06) をブラウザから設定・動作確認するツール。インストール不要。">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>⚙️</text></svg>">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">RS</span>
+    <div>
+      <h1>RobStride QDD コンフィギュレータ</h1>
+      <p class="sub">ブラウザから直接 USB-CAN を操作 (インストール不要)</p>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <div class="conn-pill" id="connPill"><span class="dot"></span><span id="connText">未接続</span></div>
+    <label class="arm-switch" title="動作を伴う操作のソフトウェアインターロック">
+      <input type="checkbox" id="armToggle" disabled>
+      <span class="arm-track"><span class="arm-thumb"></span></span>
+      <span class="arm-label">動作許可</span>
+    </label>
+    <button id="estopBtn" class="estop" disabled>非常停止</button>
+  </div>
+</header>
+
+<div id="unsupported" class="unsupported" hidden>
+  <h2>このブラウザでは利用できません</h2>
+  <p>本ツールは <b>Web Serial API</b> を使って USB-CAN アダプタを直接操作します。</p>
+  <p><b>Chrome</b> または <b>Edge</b> (デスクトップ版) でお試しください。
+     Safari と Firefox は Web Serial に対応していません。</p>
+  <p>ブラウザを変えられない場合は、<a href="https://github.com/FaBoAI/RSWebTools">ローカル版 (Python)</a>
+     をお使いください。</p>
+</div>
+
+<div class="layout" id="app">
+  <aside class="sidebar">
+    <section class="card">
+      <h2>1. 接続</h2>
+      <label class="field">
+        <span>シリアル速度</span>
+        <select id="baudSelect"></select>
+      </label>
+      <label class="field">
+        <span>ホスト CAN_ID</span>
+        <input type="number" id="hostId" value="253" min="0" max="255">
+      </label>
+      <div class="row gap">
+        <button id="connectBtn" class="primary">ポートを選んで接続</button>
+        <button id="disconnectBtn" disabled>切断</button>
+      </div>
+      <p class="hint">ブラウザのダイアログで USB-CAN アダプタ (CH340 など) を選んでください。</p>
+    </section>
+
+    <section class="card">
+      <h2>2. モータ探索</h2>
+      <div class="row gap">
+        <label class="field tiny"><span>開始 ID</span><input type="number" id="scanStart" value="0" min="0" max="127"></label>
+        <label class="field tiny"><span>終了 ID</span><input type="number" id="scanEnd" value="127" min="0" max="127"></label>
+      </div>
+      <button id="scanBtn" class="primary" disabled>スキャン</button>
+      <div class="progress" id="scanProgress" hidden><div></div></div>
+      <ul class="motor-list" id="motorList"><li class="empty">未検出</li></ul>
+      <label class="field">
+        <span>機種 (スケーリングに使用)</span>
+        <select id="modelSelect"></select>
+      </label>
+      <p class="hint">機種を誤ると角度・速度・トルクの換算がずれます。</p>
+    </section>
+
+    <section class="card telemetry">
+      <h2>テレメトリ</h2>
+      <div class="tele-grid">
+        <div><label>角度</label><b id="teleAngle">–</b><i>rad</i></div>
+        <div><label>速度</label><b id="teleVel">–</b><i>rad/s</i></div>
+        <div><label>トルク</label><b id="teleTorque">–</b><i>Nm</i></div>
+        <div><label>温度</label><b id="teleTemp">–</b><i>℃</i></div>
+      </div>
+      <div class="tele-status">
+        <span class="badge" id="teleMode">モード –</span>
+        <span id="teleFaults"></span>
+      </div>
+      <label class="checkbox"><input type="checkbox" id="reportToggle" disabled> 能動送信 (定期テレメトリ)</label>
+    </section>
+  </aside>
+
+  <main class="main">
+    <nav class="tabs">
+      <button class="tab active" data-tab="params">パラメータ設定</button>
+      <button class="tab" data-tab="run">運転・テスト</button>
+      <button class="tab" data-tab="device">デバイス設定</button>
+      <button class="tab" data-tab="console">CAN コンソール</button>
+    </nav>
+
+    <section class="panel active" id="tab-params">
+      <div class="panel-head">
+        <div class="row gap">
+          <button id="readAllBtn" class="primary" disabled>全パラメータ読出</button>
+          <button id="writeDirtyBtn" disabled>変更分を書込</button>
+          <button id="saveBtn" class="warn" disabled>モータへ保存</button>
+        </div>
+        <div class="row gap">
+          <button id="exportBtn" class="ghost" disabled>エクスポート</button>
+          <button id="importBtn" class="ghost" disabled>インポート</button>
+          <input type="file" id="importFile" accept="application/json" hidden>
+        </div>
+      </div>
+      <div class="progress" id="readProgress" hidden><div></div></div>
+      <p class="hint">書込 (通信タイプ 18) は電源断で失われます。恒久化するには「モータへ保存」(通信タイプ 22) を実行してください。</p>
+      <div id="paramGroups" class="param-groups"><p class="empty-state">接続してモータを選択し、「全パラメータ読出」を実行してください。</p></div>
+    </section>
+
+    <section class="panel" id="tab-run">
+      <div class="banner warn-banner">
+        動作を伴う操作です。可動範囲の安全を確認し、「動作許可」を ON にしてから実行してください。
+      </div>
+      <div class="cards2">
+        <div class="card">
+          <h2>運転モード</h2>
+          <label class="field"><span>run_mode (0x7005)</span><select id="runModeSelect"></select></label>
+          <div class="row gap">
+            <button id="applyModeBtn" disabled>モード適用</button>
+            <button id="enableBtn" class="primary" disabled>運転許可</button>
+            <button id="stopBtn" disabled>停止</button>
+            <button id="clearFaultBtn" disabled>故障クリア</button>
+          </div>
+        </div>
+        <div class="card">
+          <h2>指令値</h2>
+          <div id="modeWarning" class="mode-warning" hidden></div>
+          <div id="commandFields" class="command-fields">
+            <p class="empty-state">モードを選択すると対応する指令欄が表示されます。</p>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>運動制御モード (通信タイプ 1)</h2>
+        <p class="hint">t_ref = Kd·(v_set − v_act) + Kp·(p_set − p_act) + t_ff</p>
+        <div class="motion-grid" id="motionGrid"></div>
+        <div class="row gap">
+          <button id="motionSendBtn" disabled>1 回送信</button>
+          <button id="motionStreamBtn" disabled>連続送信 開始</button>
+          <span class="hint" id="motionRate"></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="tab-device">
+      <div class="cards2">
+        <div class="card">
+          <h2>デバイス情報</h2>
+          <button id="infoBtn" disabled>情報を取得</button>
+          <dl class="info-list" id="deviceInfo"><dt>—</dt><dd>未取得</dd></dl>
+        </div>
+        <div class="card">
+          <h2>機械原点</h2>
+          <p class="hint">現在位置を 0 とします。PP モード中は実行できません。</p>
+          <button id="zeroBtn" class="warn" disabled>現在位置を原点に設定</button>
+        </div>
+        <div class="card">
+          <h2>CAN_ID 変更</h2>
+          <p class="hint">即時反映されます。変更後は再スキャンしてください。</p>
+          <label class="field"><span>新しい CAN_ID (0–127)</span><input type="number" id="newCanId" min="0" max="127" value="1"></label>
+          <button id="canIdBtn" class="warn" disabled>CAN_ID を変更</button>
+        </div>
+        <div class="card danger-card">
+          <h2>上級設定</h2>
+          <p class="hint">いずれもモータの再電源投入で反映されます。設定を誤ると通信できなくなります。</p>
+          <label class="field"><span>モータ側 CAN ボーレート</span><select id="canBaudSelect"></select></label>
+          <button id="canBaudBtn" class="danger" disabled>CAN ボーレート変更</button>
+          <label class="field"><span>通信プロトコル</span><select id="protocolSelect"></select></label>
+          <button id="protocolBtn" class="danger" disabled>プロトコル変更</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>インデックス調査</h2>
+        <p class="hint">未文書のパラメータ (0x20xx / 0x30xx 系) を読み出しのみで総当たり調査します。書き込みは行いません。</p>
+        <div class="row gap">
+          <label class="field tiny"><span>開始</span><input type="text" id="idxStart" value="0x2000"></label>
+          <label class="field tiny"><span>終了</span><input type="text" id="idxEnd" value="0x202F"></label>
+          <button id="idxScanBtn" disabled>調査開始</button>
+        </div>
+        <div id="idxResult" class="table-wrap"></div>
+      </div>
+    </section>
+
+    <section class="panel" id="tab-console">
+      <div class="panel-head">
+        <div class="row gap">
+          <label class="field tiny"><span>拡張 ID (hex)</span><input type="text" id="rawId" value="0x1100FD01"></label>
+          <label class="field"><span>データ (hex, 最大 8 バイト)</span><input type="text" id="rawData" value="05 70 00 00 00 00 00 00"></label>
+          <button id="rawSendBtn" disabled>送信</button>
+        </div>
+        <div class="row gap">
+          <label class="checkbox"><input type="checkbox" id="autoScroll" checked> 自動スクロール</label>
+          <button id="atModeBtn" class="ghost" disabled title="アダプタを透過(AT)モードにする">AT+AT 送信</button>
+          <button id="clearLogBtn" class="ghost">ログ消去</button>
+        </div>
+      </div>
+      <div class="table-wrap log-wrap">
+        <table class="log-table">
+          <thead><tr><th>時刻</th><th>方向</th><th>拡張 ID</th><th>種別</th><th>データ</th></tr></thead>
+          <tbody id="logBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="site-links">
+      <a href="https://github.com/FaBoAI/RSWebTools">GitHub</a>
+      <span>·</span>
+      <a href="https://github.com/FaBoAI/RSWebTools/blob/main/docs/protocol.md">プロトコル資料</a>
+      <span>·</span>
+      <a href="https://github.com/FaBoAI/RSWebTools/blob/main/docs/adapter-check.md">つながらないとき</a>
+      <span>·</span>
+      <span>MIT License</span>
+    </footer>
+  </main>
+</div>
+
+<div id="toasts" class="toasts"></div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>
