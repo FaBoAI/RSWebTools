@@ -111,18 +111,35 @@ LED だけでは MCU の生死は確定しないため、上の `--listen` テ�
 **原因**: macOS 標準の CH340 ドライバ `com.apple.DriverKit-AppleUSBCHCOM` が
 921600bps でデータを壊していた。
 
-**対策**: WCH 純正ドライバ (CH34xVCPDriver) を入れる。
-<https://www.wch.cn/downloads/CH34XSER_MAC_ZIP.html>
+**対策**: WCH 公式ドライバ (CH34xVCPDriver) に入れ替える。
 
-導入後は `システム設定 → 一般 → ログイン項目と機能拡張 → ドライバ機能拡張` で
-有効化し、**アダプタを挿し直してください**。挿したままだとデバイスの再マッチングが
-起きず、標準ドライバが掴んだままになります。成功するとポート名が
-`/dev/cu.wchusbserial*` に変わります。
+1. 公式リポジトリから入手する
+   <https://github.com/WCHSoftGroup/ch34xser_macos>
+   (ミラー: <https://www.wch.cn/downloads/CH34XSER_MAC_ZIP.html>)
+
+2. `CH34xVCPDriver.dmg` を開き、`CH34xVCPDriver.app` を `アプリケーション` へ
+   ドラッグしてから、アプリを起動して **Install** を押す
+
+3. `システム設定` → `一般` → `ログイン項目と機能拡張` → `ドライバ機能拡張` で
+   **CH34xVCPDriver** を有効にする
+   (macOS のバージョンによっては `プライバシーとセキュリティ` に
+   「"CH34xVCPDriver" の機能拡張がブロックされました」と出るので **許可** を押す)
+
+4. **アダプタを挿し直す**
+
+   ドライバを入れたときにアダプタが挿さったままだと、デバイスの再マッチングが
+   起きず標準ドライバが掴んだままになる。実際にこれで詰まったので必ず抜き挿しする。
+
+成功するとポート名が `/dev/cu.wchusbserial*` に変わる。
 
 ```bash
 ls /dev/cu.wchusbserial*                      # ポート名で判別
 ioreg -p IOService -l -w0 | grep -i CHCOM     # 標準ドライバが残っていないか
+systemextensionsctl list | grep -i wch        # 有効化されているか
 ```
+
+`systemextensionsctl list` に `[activated enabled]` と出ているのにポート名が
+`cu.usbserial-*` のままなら、**手順 4 (挿し直し) をしていない**状態です。
 
 ### 標準ドライバのときに何が起きていたか
 

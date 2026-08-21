@@ -220,16 +220,40 @@ DIP 1 が ON のとき、CH340 (USB-シリアル変換チップ) は MCU の手�
 **どれを送っても 1 バイトも返らない場合は、モジュールの MCU が動いていません**
 (DIP 1 が ON / モジュール故障 / そもそも RobStride USB-CAN ではなく素の USB-TTL 変換基板)。
 
-### 通信できない / 受信が化ける (macOS)
+### macOS: CH34x 公式ドライバへの入れ替えが必要
 
-**macOS 標準の CH340 ドライバでは通信できません。** ポートが
-`/dev/cu.usbserial-*` として見えている場合は標準ドライバです。
-WCH 純正ドライバ ([CH34xVCPDriver](https://www.wch.cn/downloads/CH34XSER_MAC_ZIP.html))
-を入れ、有効化したうえで**アダプタを挿し直して**ください。
-ポート名が `/dev/cu.wchusbserial*` に変われば成功です。
+**macOS 標準の CH340 ドライバでは通信できません。** ポートが `/dev/cu.usbserial-*`
+として見えている場合は標準ドライバです (`AppleUSBCHCOM`)。ポート自体は正常に
+見えるのにモータが一切応答しない、という症状になります。
+
+1. **公式ドライバを入手する**
+   <https://github.com/WCHSoftGroup/ch34xser_macos>
+
+2. **インストールする**
+   `CH34xVCPDriver.dmg` を開き、`CH34xVCPDriver.app` を `アプリケーション` へ
+   ドラッグしてから、アプリを起動して **Install** を押します。
+
+3. **機能拡張を許可する**
+   `システム設定` → `一般` → `ログイン項目と機能拡張` → `ドライバ機能拡張` を開き、
+   **CH34xVCPDriver** を有効にします。
+   (macOS のバージョンによっては `プライバシーとセキュリティ` に
+   「"CH34xVCPDriver" の機能拡張がブロックされました」と出るので **許可** を押します)
+
+4. **アダプタを挿し直す** ← 忘れがち
+
+   ドライバを入れたときにアダプタが挿さったままだと、デバイスの再マッチングが
+   起きず標準ドライバが掴んだままになります。**必ず抜き挿ししてください。**
+
+成功するとポート名が `/dev/cu.wchusbserial*` に変わります。
+
+```bash
+ls /dev/cu.wchusbserial*                      # ポート名で判別
+ioreg -p IOService -l -w0 | grep -i CHCOM     # 標準ドライバが残っていないか
+systemextensionsctl list | grep -i wch        # 有効化されているか
+```
 
 シリアル速度はマニュアルどおり **921600 bps** で通信できます。
-詳細な切り分け手順は [docs/adapter-check.md](docs/adapter-check.md) を参照してください。
+判定根拠と詳しい切り分けは [docs/adapter-check.md](docs/adapter-check.md) を参照してください。
 
 ### シリアルポートが見つからない
 CH340 のドライバが必要です。ポート一覧で `(CH340)` と表示されていれば認識できています。

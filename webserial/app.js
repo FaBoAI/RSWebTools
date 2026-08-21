@@ -18,6 +18,7 @@ const el = (tag, cls, text) => {
   if (text !== undefined) n.textContent = text;
   return n;
 };
+const isMacOS = () => /Mac/i.test(navigator.userAgentData?.platform ?? navigator.platform ?? '');
 const fmt = (v, d = 3) => (v === null || v === undefined || Number.isNaN(v) ? '–' : Number(v).toFixed(d));
 const parseHex = (s) => {
   const v = parseInt(String(s).trim().replace(/^0x/i, ''), 16);
@@ -539,7 +540,8 @@ function wire() {
         selectMotor(S.motors[0].motorId);
         toast(`${S.motors.length} 台のモータを検出しました`, 'ok');
       } else {
-        toast('モータが見つかりません。電源・結線・終端抵抗・CAN ボーレートを確認してください。', 'warn');
+        toast('モータが見つかりません。モータの電源・CAN H/L の結線・終端抵抗を確認してください。'
+          + (isMacOS() ? ' macOS では WCH 公式ドライバが必要です (左の案内を参照)。' : ''), 'warn');
       }
     } catch (e) { toast(`スキャン失敗: ${e.message}`, 'err'); }
     progress('scanProgress', 1, 1);
@@ -777,6 +779,10 @@ async function motorAction(fn, okMsg) {
       ps.appendChild(o);
     });
   void PROTOCOL_CODES;
+
+  // macOS は標準の CH340 ドライバでは通信できないため案内を出す
+  const isMac = /Mac/i.test(navigator.userAgentData?.platform ?? navigator.platform ?? '');
+  if (isMac) $('macNote').hidden = false;
 
   setStatus();
   updateEnabled();

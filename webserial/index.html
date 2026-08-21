@@ -55,6 +55,14 @@
         <button id="disconnectBtn" disabled>切断</button>
       </div>
       <p class="hint">ブラウザのダイアログで USB-CAN アダプタ (CH340 など) を選んでください。</p>
+      <p class="hint driver-note" id="macNote" hidden>
+        <b>macOS の方へ:</b> 標準の CH340 ドライバでは通信できません。
+        ポート名が <code>usbserial-</code> の場合は
+        <a href="https://github.com/WCHSoftGroup/ch34xser_macos" target="_blank" rel="noopener">WCH 公式ドライバ</a>
+        を入れ、<code>システム設定 → 一般 → ログイン項目と機能拡張 → ドライバ機能拡張</code>
+        で許可したうえで<b>アダプタを挿し直して</b>ください
+        (<code>wchusbserial</code> に変われば成功)。
+      </p>
     </section>
 
     <section class="card">
